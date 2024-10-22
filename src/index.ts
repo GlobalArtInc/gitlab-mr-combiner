@@ -1,7 +1,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import { MergeRequest, NoteEvent } from './interfaces';
-import { GITLAB_URL, TRIGGER_MESSAGE, TRIGGER_TAG, BRANCH, GITLAB_TOKEN, GIT_EMAIL, GIT_USER } from './consts';
+import { GITLAB_URL, TRIGGER_MESSAGE, TRIGGER_TAG, TARGET_BRANCH, GITLAB_TOKEN, GIT_EMAIL, GIT_USER } from './consts';
 import { ApiClient } from './api.client';
 import { exec } from 'child_process';
 import util from 'util';
@@ -24,7 +24,7 @@ export class Server {
     const requiredVars = [
       { name: 'TRIGGER_MESSAGE', value: TRIGGER_MESSAGE },
       { name: 'TRIGGER_TAG', value: TRIGGER_TAG },
-      { name: 'BRANCH', value: BRANCH },
+      { name: 'TARGET_BRANCH', value: TARGET_BRANCH },
       { name: 'GITLAB_TOKEN', value: GITLAB_TOKEN },
       { name: 'GITLAB_URL', value: GITLAB_URL },
     ];
@@ -55,16 +55,16 @@ export class Server {
     try {
       const { defaultBranch, repoUrl } = await this.getRepoInfo(projectId);
       await this.cloneOrFetchBranch(repoUrl, defaultBranch, projectId);
-      await this.createBranch(BRANCH, defaultBranch, projectId);
+      await this.createBranch(TARGET_BRANCH, defaultBranch, projectId);
 
       const mergeRequests = await this.fetchMergeRequests(projectId);
       await Promise.all(mergeRequests.map((mr: MergeRequest) => this.mergeMRToBranch(mr, projectId)));
 
       await this.forcePushToRemote(projectId);
-      await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${BRANCH}`);
+      await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}`);
     } catch (error) {
       console.error(`Error in combineAllMRs: ${error}`);
-      await this.createCommentOnMR(projectId, mergeRequestId, `An error occurred during rebase into ${BRANCH}`);
+      await this.createCommentOnMR(projectId, mergeRequestId, `An error occurred during rebase into ${TARGET_BRANCH}`);
     }
   }
 
@@ -119,7 +119,7 @@ export class Server {
   }
 
   async forcePushToRemote(projectId: number) {
-    await execPromise(`cd /tmp/${projectId} && git push origin ${BRANCH} --force`);
+    await execPromise(`cd /tmp/${projectId} && git push origin ${TARGET_BRANCH} --force`);
     console.log(`Force pushed to remote repository`);
   }
 
