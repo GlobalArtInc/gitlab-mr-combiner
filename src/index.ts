@@ -5,9 +5,23 @@ import { GITLAB_URL, TRIGGER_MESSAGE, TRIGGER_TAG, TARGET_BRANCH, GITLAB_TOKEN, 
 import { ApiClient } from './api.client';
 import { exec } from 'child_process';
 import util from 'util';
+import { createLogger, format, transports } from 'winston';
 
 const execPromise = util.promisify(exec);
 const PORT = process.env.PORT || 8080;
+
+const logger = createLogger({
+  level: 'info',
+  format: format.combine(
+    format.timestamp(),
+    format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} [${level}]: ${message}`;
+    })
+  ),
+  transports: [
+    new transports.Console() // Логи выводятся только в консоль
+  ],
+});
 
 export class Server {
   private readonly api: ApiClient;
@@ -25,13 +39,13 @@ export class Server {
     this.app.post('/webhook', this.handleWebhook.bind(this));
     this.app.listen(PORT, async () => {
       await this.initGit();
-      console.log(`Server is listening on port ${PORT}`)
+      logger.info(`Server is listening on port ${PORT}`);
     });
   }
 
   async initGit() {
-    execPromise(`git config --global user.email "${GIT_EMAIL}"`);
-    execPromise(`git config --global user.name "${GIT_USER}"`);
+    await execPromise(`git config --global user.email "${GIT_EMAIL}"`);
+    await execPromise(`git config --global user.name "${GIT_USER}"`);
   }
 
   private checkEnvVariables() {
@@ -45,7 +59,7 @@ export class Server {
 
     requiredVars.forEach(({ name, value }) => {
       if (!value) {
-        console.error(`Environment variable ${name} is missing.`);
+        logger.error(`Environment variable ${name} is missing.`);
         process.exit(1);
       }
     });
@@ -77,7 +91,7 @@ export class Server {
       await this.forcePushToRemote(projectId);
       await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}`);
     } catch (error) {
-      console.error(`Error in combineAllMRs: ${error}`);
+      logger.error(`Error in combineAllMRs: ${error}`);
       await this.createCommentOnMR(projectId, mergeRequestId, `An error occurred during rebase into ${TARGET_BRANCH}`);
     }
   }
@@ -88,10 +102,10 @@ export class Server {
     try {
       await execPromise(`git -C ${clonePath} fetch`);
       await execPromise(`git -C ${clonePath} reset --hard origin/${defaultBranch}`);
-      console.log(`Updated existing branch ${defaultBranch} in ${clonePath}`);
+      logger.info(`Updated existing branch ${defaultBranch} in ${clonePath}`);
     } catch {
       await execPromise(`git clone --single-branch --branch ${defaultBranch} ${repoUrl} ${clonePath}`);
-      console.log(`Cloned branch ${defaultBranch} to ${clonePath}`);
+      logger.info(`Cloned branch ${defaultBranch} to ${clonePath}`);
     }
   }
 
@@ -101,15 +115,15 @@ export class Server {
     try {
       await execPromise(`git -C ${clonePath} checkout ${baseBranch}`);
       await execPromise(`git -C ${clonePath} branch -D ${branchName}`);
-      console.log(`Deleted existing branch ${branchName}`);
+      logger.info(`Deleted existing branch ${branchName}`);
     } catch (error: any) {
       if (!error.message.includes('did not match any file(s) known to git')) {
-        console.log(`Error deleting branch ${branchName}: ${error.message}`);
+        logger.error(`Error deleting branch ${branchName}: ${error.message}`);
       }
     }
 
     await execPromise(`git -C ${clonePath} checkout -b ${branchName}`);
-    console.log(`Created branch ${branchName}`);
+    logger.info(`Created branch ${branchName}`);
   }
 
   private async fetchMergeRequests(projectId: number) {
@@ -127,12 +141,12 @@ export class Server {
     const mrId = mergeRequest.iid;
     await execPromise(`cd /tmp/${projectId} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
     await execPromise(`cd /tmp/${projectId} && git merge mr-${mrId}`);
-    console.log(`Merged MR #${mrId} into current branch`);
+    logger.info(`Merged MR #${mrId} into current branch`);
   }
 
   private async forcePushToRemote(projectId: number) {
     await execPromise(`cd /tmp/${projectId} && git push origin ${TARGET_BRANCH} --force`);
-    console.log(`Force pushed to remote repository`);
+    logger.info(`Force pushed to remote repository`);
   }
 
   private async getRepoInfo(projectId: number): Promise<{ defaultBranch: string; repoUrl: string }> {
@@ -150,7 +164,7 @@ export class Server {
       url: `/projects/${projectId}/merge_requests/${mergeRequestId}/notes`,
       data: { body: comment },
     });
-    console.log(`Comment added to MR #${mergeRequestId}: ${comment}`);
+    logger.info(`Comment added to MR #${mergeRequestId}: ${comment}`);
   }
 }
 
