@@ -12,6 +12,7 @@ URL looks like: http://your-server.tld:8080/webhook
 7) Push the changes into branch
 
 ## Installation
+### Docker
 You can install this in docker:
 ```bash
 docker run -d --rm --name gitlab-mr-combiner \
@@ -24,6 +25,9 @@ docker run -d --rm --name gitlab-mr-combiner \
   -v ~/.ssh:/root/.ssh:ro \
   globalartltd/gitlab-mr-combiner
 ```
+### Kubernetes
+[You can install using helm chart](https://github.com/GlobalArtInc/helm-charts/tree/master/charts/gitlab-mr-combiner)
+
 **You must store the SSH private key of any user who has access to the repository!**<br />
 In this example, we mount it from the volume.
 
