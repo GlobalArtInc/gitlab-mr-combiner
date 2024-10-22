@@ -10,17 +10,31 @@ const execPromise = util.promisify(exec);
 const PORT = process.env.PORT || 8080;
 
 export class Server {
-  private readonly api = new ApiClient(GITLAB_URL);
-  private readonly app = express();
+  private readonly api: ApiClient;
+  private readonly app: express.Express;
+
+  constructor() {
+    this.api = new ApiClient(GITLAB_URL);
+    this.app = express();
+  }
 
   init() {
     this.checkEnvVariables();
+    this.initGit();
     this.app.use(bodyParser.json());
     this.app.post('/webhook', this.handleWebhook.bind(this));
-    this.app.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
+    this.app.listen(PORT, async () => {
+      await this.initGit();
+      console.log(`Server is listening on port ${PORT}`)
+    });
   }
 
-  checkEnvVariables() {
+  async initGit() {
+    execPromise(`git config --global user.email "${GIT_EMAIL}"`);
+    execPromise(`git config --global user.name "${GIT_USER}"`);
+  }
+
+  private checkEnvVariables() {
     const requiredVars = [
       { name: 'TRIGGER_MESSAGE', value: TRIGGER_MESSAGE },
       { name: 'TRIGGER_TAG', value: TRIGGER_TAG },
@@ -37,7 +51,7 @@ export class Server {
     });
   }
 
-  async handleWebhook(req: express.Request, res: express.Response) {
+  private async handleWebhook(req: express.Request, res: express.Response) {
     const event = req.body as NoteEvent;
 
     if (this.isTriggerEvent(event)) {
@@ -47,11 +61,11 @@ export class Server {
     res.sendStatus(200);
   }
 
-  isTriggerEvent(event: NoteEvent): boolean {
+  private isTriggerEvent(event: NoteEvent): boolean {
     return event.event_type === 'note' && event.object_attributes.action === 'create' && TRIGGER_MESSAGE === event.object_attributes.note;
   }
 
-  async combineAllMRs(projectId: number, mergeRequestId: number) {
+  private async combineAllMRs(projectId: number, mergeRequestId: number) {
     try {
       const { defaultBranch, repoUrl } = await this.getRepoInfo(projectId);
       await this.cloneOrFetchBranch(repoUrl, defaultBranch, projectId);
@@ -68,10 +82,8 @@ export class Server {
     }
   }
 
-  async cloneOrFetchBranch(repoUrl: string, defaultBranch: string, projectId: number) {
+  private async cloneOrFetchBranch(repoUrl: string, defaultBranch: string, projectId: number) {
     const clonePath = `/tmp/${projectId}`;
-    execPromise(`git config --global user.email "${GIT_EMAIL}"`);
-    execPromise(`git config --global user.name "${GIT_USER}"`);
 
     try {
       await execPromise(`git -C ${clonePath} fetch`);
@@ -83,7 +95,7 @@ export class Server {
     }
   }
 
-  async createBranch(branchName: string, baseBranch: string, projectId: number) {
+  private async createBranch(branchName: string, baseBranch: string, projectId: number) {
     const clonePath = `/tmp/${projectId}`;
 
     try {
@@ -100,7 +112,7 @@ export class Server {
     console.log(`Created branch ${branchName}`);
   }
 
-  async fetchMergeRequests(projectId: number) {
+  private async fetchMergeRequests(projectId: number) {
     return this.api.send({
       method: 'GET',
       url: `/projects/${projectId}/merge_requests`,
@@ -111,19 +123,19 @@ export class Server {
     });
   }
 
-  async mergeMRToBranch(mergeRequest: any, projectId: number) {
+  private async mergeMRToBranch(mergeRequest: any, projectId: number) {
     const mrId = mergeRequest.iid;
     await execPromise(`cd /tmp/${projectId} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
     await execPromise(`cd /tmp/${projectId} && git merge mr-${mrId}`);
     console.log(`Merged MR #${mrId} into current branch`);
   }
 
-  async forcePushToRemote(projectId: number) {
+  private async forcePushToRemote(projectId: number) {
     await execPromise(`cd /tmp/${projectId} && git push origin ${TARGET_BRANCH} --force`);
     console.log(`Force pushed to remote repository`);
   }
 
-  async getRepoInfo(projectId: number): Promise<{ defaultBranch: string; repoUrl: string }> {
+  private async getRepoInfo(projectId: number): Promise<{ defaultBranch: string; repoUrl: string }> {
     const project = await this.api.send({
       method: 'GET',
       url: `/projects/${projectId}`,
@@ -132,7 +144,7 @@ export class Server {
     return { defaultBranch: project.default_branch, repoUrl: project.ssh_url_to_repo };
   }
 
-  async createCommentOnMR(projectId: number, mergeRequestId: number, comment: string) {
+  private async createCommentOnMR(projectId: number, mergeRequestId: number, comment: string) {
     await this.api.send({
       method: 'POST',
       url: `/projects/${projectId}/merge_requests/${mergeRequestId}/notes`,
