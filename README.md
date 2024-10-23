@@ -18,7 +18,7 @@ You can install this in docker:
 docker run -d --rm --name gitlab-mr-combiner \
   -p 8080:8080 \
   -e TRIGGER_MESSAGE="/specific-message" \
-  -e BRANCH="target_branch" \
+  -e TARGET_BRANCH="target_branch" \
   -e TRIGGER_TAG="specific_tag" \
   -e GITLAB_TOKEN="<your access_token>" \
   -e GITLAB_URL="<your_gitlab_url>, default is https://gitlab.com" \
