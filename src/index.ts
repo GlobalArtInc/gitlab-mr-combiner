@@ -19,7 +19,7 @@ const logger = createLogger({
     })
   ),
   transports: [
-    new transports.Console() // Логи выводятся только в консоль
+    new transports.Console()
   ],
 });
 
@@ -69,7 +69,7 @@ export class Server {
     const event = req.body as NoteEvent;
 
     if (this.isTriggerEvent(event)) {
-      await this.combineAllMRs(event.project_id, event.merge_request.iid);
+      this.combineAllMRs(event.project_id, event.merge_request.iid);
     }
 
     res.sendStatus(200);
@@ -80,53 +80,64 @@ export class Server {
   }
 
   private async combineAllMRs(projectId: number, mergeRequestId: number) {
+    let logs = '';
+    const logMessage = (message: string) => {
+      logger.info(message);
+      logs += message + '\n';
+    };
+
     try {
       const { defaultBranch, repoUrl } = await this.getRepoInfo(projectId);
-      await this.cloneOrFetchBranch(repoUrl, defaultBranch, projectId);
-      await this.createBranch(TARGET_BRANCH, defaultBranch, projectId);
+      logMessage(`Fetched repo info: branch = ${defaultBranch}, url = ${repoUrl}`);
+      
+      await this.cloneOrFetchBranch(repoUrl, defaultBranch, projectId, logMessage);
+      await this.createBranch(TARGET_BRANCH, defaultBranch, projectId, logMessage);
 
       const mergeRequests = await this.fetchMergeRequests(projectId);
-      await Promise.all(mergeRequests.map((mr: MergeRequest) => this.mergeMRToBranch(mr, projectId)));
+      logMessage(`Found ${mergeRequests.length} merge requests`);
 
-      await this.forcePushToRemote(projectId);
-      await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}`);
+      await Promise.all(mergeRequests.map((mr: MergeRequest) => this.mergeMRToBranch(mr, projectId, logMessage)));
+
+      await this.forcePushToRemote(projectId, logMessage);
+      await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}\n\`\`\`\n${logs}\n\`\`\``);
     } catch (error) {
-      logger.error(`Error in combineAllMRs: ${error}`);
-      await this.createCommentOnMR(projectId, mergeRequestId, `An error occurred during rebase into ${TARGET_BRANCH}`);
+      logMessage(`Error in combineAllMRs: ${error}`);
+      await this.createCommentOnMR(projectId, mergeRequestId, `An error occurred during rebase into ${TARGET_BRANCH}\n\`\`\`\n${logs}\n\`\`\``);
     }
   }
 
-  private async cloneOrFetchBranch(repoUrl: string, defaultBranch: string, projectId: number) {
+  private async cloneOrFetchBranch(repoUrl: string, defaultBranch: string, projectId: number, logMessage: (msg: string) => void) {
     const clonePath = `/tmp/${projectId}`;
-
-    try {
-      await execPromise(`git -C ${clonePath} fetch`);
-      await execPromise(`git -C ${clonePath} reset --hard origin/${defaultBranch}`);
-      logger.info(`Updated existing branch ${defaultBranch} in ${clonePath}`);
-    } catch {
-      await execPromise(`git clone --single-branch --branch ${defaultBranch} ${repoUrl} ${clonePath}`);
-      logger.info(`Cloned branch ${defaultBranch} to ${clonePath}`);
-    }
+    await execPromise(`rm -rf ${clonePath}`)
+    await execPromise(`git clone --branch ${defaultBranch} ${repoUrl} ${clonePath}`);
+    logMessage(`Cloned branch ${defaultBranch} to ${clonePath}`);
   }
 
-  private async createBranch(branchName: string, baseBranch: string, projectId: number) {
+  private async createBranch(branchName: string, baseBranch: string, projectId: number, logMessage: (msg: string) => void) {
     const clonePath = `/tmp/${projectId}`;
 
     try {
       await execPromise(`git -C ${clonePath} checkout ${baseBranch}`);
       await execPromise(`git -C ${clonePath} branch -D ${branchName}`);
-      logger.info(`Deleted existing branch ${branchName}`);
+      logMessage(`Deleted existing branch ${branchName}`);
     } catch (error: any) {
       if (!error.message.includes('did not match any file(s) known to git')) {
-        logger.error(`Error deleting branch ${branchName}: ${error.message}`);
+        logMessage(`Error deleting branch ${branchName}: ${error.message}`);
       }
     }
 
     await execPromise(`git -C ${clonePath} checkout -b ${branchName}`);
-    logger.info(`Created branch ${branchName}`);
+    logMessage(`Created branch ${branchName}`);
   }
 
-  private async fetchMergeRequests(projectId: number) {
+  private async mergeMRToBranch(mergeRequest: any, projectId: number, logMessage: (msg: string) => void) {
+    const mrId = mergeRequest.iid;
+    await execPromise(`cd /tmp/${projectId} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
+    await execPromise(`cd /tmp/${projectId} && git merge mr-${mrId}`);
+    logMessage(`Merged MR #${mrId} into current branch`);
+  }
+
+  private async fetchMergeRequests(projectId: number): Promise<MergeRequest[]> { 
     return this.api.send({
       method: 'GET',
       url: `/projects/${projectId}/merge_requests`,
@@ -137,16 +148,9 @@ export class Server {
     });
   }
 
-  private async mergeMRToBranch(mergeRequest: any, projectId: number) {
-    const mrId = mergeRequest.iid;
-    await execPromise(`cd /tmp/${projectId} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
-    await execPromise(`cd /tmp/${projectId} && git merge mr-${mrId}`);
-    logger.info(`Merged MR #${mrId} into current branch`);
-  }
-
-  private async forcePushToRemote(projectId: number) {
+  private async forcePushToRemote(projectId: number, logMessage: (msg: string) => void) {
     await execPromise(`cd /tmp/${projectId} && git push origin ${TARGET_BRANCH} --force`);
-    logger.info(`Force pushed to remote repository`);
+    logMessage(`Force pushed to remote repository`);
   }
 
   private async getRepoInfo(projectId: number): Promise<{ defaultBranch: string; repoUrl: string }> {
