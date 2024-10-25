@@ -130,7 +130,7 @@ export class Server {
     logMessage(`Created branch ${branchName}`);
   }
 
-  private async pullMRToBranch(mergeRequest: any, projectId: number, logMessage: (msg: string) => void) {
+  private async pullMRToBranch(mergeRequest: MergeRequest, projectId: number, logMessage: (msg: string) => void) {
     const mrId = mergeRequest.iid;
     const clonePath = `/tmp/${projectId}`;
     await execPromise(`cd ${clonePath} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
@@ -171,7 +171,7 @@ export class Server {
       url: `/projects/${projectId}/merge_requests/${mergeRequestId}/notes`,
       data: { body: comment },
     });
-    logger.info(`Comment added to MR #${mergeRequestId}: ${comment}`);
+    logger.info(`Comment added to MR #${mergeRequestId}`);
   }
 }
 
