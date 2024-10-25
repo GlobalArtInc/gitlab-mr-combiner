@@ -96,7 +96,7 @@ export class Server {
       const mergeRequests = await this.fetchMergeRequests(projectId);
       logMessage(`Found ${mergeRequests.length} merge requests`);
 
-      await Promise.all(mergeRequests.map((mr: MergeRequest) => this.mergeMRToBranch(mr, projectId, logMessage)));
+      await Promise.all(mergeRequests.map((mr: MergeRequest) => this.pullMRToBranch(mr, projectId, logMessage)));
 
       await this.forcePushToRemote(projectId, logMessage);
       await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}\n\`\`\`\n${logs}\n\`\`\``);
@@ -130,10 +130,13 @@ export class Server {
     logMessage(`Created branch ${branchName}`);
   }
 
-  private async mergeMRToBranch(mergeRequest: any, projectId: number, logMessage: (msg: string) => void) {
+  private async pullMRToBranch(mergeRequest: any, projectId: number, logMessage: (msg: string) => void) {
     const mrId = mergeRequest.iid;
-    await execPromise(`cd /tmp/${projectId} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
-    await execPromise(`cd /tmp/${projectId} && git merge mr-${mrId}`);
+    const clonePath = `/tmp/${projectId}`;
+    await execPromise(`cd ${clonePath} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`);
+    await execPromise(`cd ${clonePath} && git checkout ${TARGET_BRANCH}`);
+    await execPromise(`cd ${clonePath} && git pull . mr-${mrId} --rebase`);
+    
     logMessage(`Merged MR #${mrId} into current branch`);
   }
 
