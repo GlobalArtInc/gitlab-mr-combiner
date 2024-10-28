@@ -67,6 +67,13 @@ export class Server {
 
   private async handleWebhook(req: express.Request, res: express.Response) {
     const event = req.body as NoteEvent;
+    const GitlabToken = req.headers?.['x-gitlab-token'];
+
+    if ((process.env.SECRET_TOKEN && !GitlabToken) || GitlabToken !== process.env.SECRET_TOKEN) {
+      logger.error('Unknown client authentication');
+      res.sendStatus(403);
+      return;
+    }
 
     if (this.isTriggerEvent(event)) {
       this.combineAllMRs(event.project_id, event.merge_request.iid);
