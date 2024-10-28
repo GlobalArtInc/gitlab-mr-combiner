@@ -103,7 +103,9 @@ export class Server {
       const mergeRequests = await this.fetchMergeRequests(projectId);
       logMessage(`Found ${mergeRequests.length} merge requests`);
 
-      await Promise.all(mergeRequests.map((mr: MergeRequest) => this.pullMRToBranch(mr, projectId, logMessage)));
+      for (const mr of mergeRequests) {
+        await this.pullMRToBranch(mr, projectId, logMessage);
+      }
 
       await this.forcePushToRemote(projectId, logMessage);
       await this.createCommentOnMR(projectId, mergeRequestId, `Merge Requests were rebased into ${TARGET_BRANCH}\n\`\`\`\n${logs}\n\`\`\``);
