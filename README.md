@@ -21,6 +21,7 @@ docker run -d --rm --name gitlab-mr-combiner \
   -e TARGET_BRANCH="target_branch" \
   -e TRIGGER_TAG="specific_tag" \
   -e GITLAB_TOKEN="<your access_token>" \
+  -e SECRET_TOKEN="<your secret_token, optional>" \
   -e GITLAB_URL="<your_gitlab_url>, default is https://gitlab.com" \
   -v ~/.ssh:/root/.ssh:ro \
   globalartltd/gitlab-mr-combiner
