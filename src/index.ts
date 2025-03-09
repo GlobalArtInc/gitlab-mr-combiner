@@ -43,7 +43,7 @@ export class Server {
     this.checkEnvVariables();
     this.initGit();
     this.app.use(bodyParser.json());
-    this.app.post("/webhook", this.handleWebhook.bind(this));
+    this.app.post("", this.handleWebhook.bind(this));
     this.app.use(this.notFoundHandler.bind(this));
     this.app.use(this.errorHandler.bind(this));
     this.app.listen(PORT, async () => {
@@ -157,7 +157,7 @@ export class Server {
     projectId: number,
     logMessage: (msg: string) => void
   ) {
-    const clonePath = `/tmp/${projectId}`;
+    const clonePath = `/gitlab-combine/project-${projectId}`;
     await execPromise(`rm -rf ${clonePath}`);
     await execPromise(
       `git clone --branch ${defaultBranch} ${repoUrl} ${clonePath}`
@@ -171,7 +171,7 @@ export class Server {
     projectId: number,
     logMessage: (msg: string) => void
   ) {
-    const clonePath = `/tmp/${projectId}`;
+    const clonePath = `/gitlab-combine/project-${projectId}`;
 
     try {
       await execPromise(`git -C ${clonePath} checkout ${baseBranch}`);
@@ -193,12 +193,12 @@ export class Server {
     logMessage: (msg: string) => void
   ) {
     const mrId = mergeRequest.iid;
-    const clonePath = `/tmp/${projectId}`;
+    const clonePath = `/gitlab-combine/project-${projectId}`;
     await execPromise(
       `cd ${clonePath} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`
     );
     await execPromise(`cd ${clonePath} && git checkout ${TARGET_BRANCH}`);
-    await execPromise(`cd ${clonePath} && git pull . mr-${mrId} --rebase`);
+    await execPromise(`cd ${clonePath} && git pull . mr-${mrId} --no-rebase`);
 
     logMessage(`Merged MR #${mrId} into current branch`);
   }
@@ -219,7 +219,7 @@ export class Server {
     logMessage: (msg: string) => void
   ) {
     await execPromise(
-      `cd /tmp/${projectId} && git push origin ${TARGET_BRANCH} --force`
+      `cd /gitlab-combine/project-${projectId} && git push origin ${TARGET_BRANCH} --force`
     );
     logMessage(`Force pushed to remote repository`);
   }
