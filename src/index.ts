@@ -157,7 +157,7 @@ export class Server {
     projectId: number,
     logMessage: (msg: string) => void
   ) {
-    const clonePath = `/gitlab-combine/project-${projectId}`;
+    const clonePath = `/gitlab-combiner/project-${projectId}`;
     await execPromise(`rm -rf ${clonePath}`);
     await execPromise(
       `git clone --branch ${defaultBranch} ${repoUrl} ${clonePath}`
@@ -171,11 +171,10 @@ export class Server {
     projectId: number,
     logMessage: (msg: string) => void
   ) {
-    const clonePath = `/gitlab-combine/project-${projectId}`;
+    const clonePath = `/gitlab-combiner/project-${projectId}`;
 
     try {
       await execPromise(`git -C ${clonePath} checkout ${baseBranch}`);
-      await execPromise(`git -C ${clonePath} branch -D ${branchName}`);
       logMessage(`Deleted existing branch ${branchName}`);
     } catch (error: any) {
       if (!error.message.includes("did not match any file(s) known to git")) {
@@ -193,7 +192,7 @@ export class Server {
     logMessage: (msg: string) => void
   ) {
     const mrId = mergeRequest.iid;
-    const clonePath = `/gitlab-combine/project-${projectId}`;
+    const clonePath = `/gitlab-combiner/project-${projectId}`;
     await execPromise(
       `cd ${clonePath} && git fetch origin merge-requests/${mrId}/head:mr-${mrId}`
     );
@@ -219,7 +218,7 @@ export class Server {
     logMessage: (msg: string) => void
   ) {
     await execPromise(
-      `cd /gitlab-combine/project-${projectId} && git push origin ${TARGET_BRANCH} --force`
+      `cd /gitlab-combiner/project-${projectId} && git push origin ${TARGET_BRANCH} --force`
     );
     logMessage(`Force pushed to remote repository`);
   }
