@@ -1,16 +1,17 @@
 {
-  "name": "Node.js Dev Container",
-  "image": "node:22",
+  "name": "Go Dev Container",
+  "image": "golang:1.22",
   "context": ".",
   "runArgs": ["--init"],
   "settings": {
     "terminal.integrated.shell.linux": "/bin/bash"
   },
   "extensions": [
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode"
+    "golang.go",
+    "dbaeumer.vscode-eslint", 
+    "esbenp.prettier-vscode" 
   ],
   "postCreateCommand": ".devcontainer/post-create.sh",
   "forwardPorts": [8080],
-  "remoteUser": "root"
+  "remoteUser": "root" 
 }

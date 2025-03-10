@@ -1,12 +1,15 @@
-FROM node:22
+FROM golang:1.22
 
 WORKDIR /app
 
-COPY . ./
-RUN npm -g i pnpm
-RUN pnpm i
-RUN npm run build
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY . .
+
+RUN go build -o gitlab-mr-combiner .
 
 RUN echo "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
 
-CMD ["npm", "start"]
+CMD ["./gitlab-mr-combiner"]
