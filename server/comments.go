@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"gitlab-mr-combiner/config"
-	"gitlab-mr-combiner/utils"
 	"net/http"
 	"strings"
 
@@ -19,7 +18,7 @@ func (s *Server) addCommentToBuffer(mergeRequestID int, comment string) {
 
 func (s *Server) sendComments(projectID, mergeRequestID int, hasError bool, r *http.Request) {
 	comments, ok := s.commentsBuffer.Load(mergeRequestID)
-	targetBranch := utils.GetQueryParam("branch", config.TargetBranch, r)
+	targetBranch := s.GetQueryParam("branch", config.TargetBranch, r)
 	if !hasError {
 		hasError = true
 	}

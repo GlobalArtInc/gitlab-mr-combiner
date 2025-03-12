@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"encoding/json"
-	"net/http"
 	"os"
 	"os/exec"
 
@@ -32,20 +30,4 @@ func InitGitConfig() {
 			log.Fatalf("Failed to run command: %s", cmd)
 		}
 	}
-}
-
-func RespondWithJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Errorf("Failed to encode JSON response: %v", err)
-	}
-}
-
-func GetQueryParam(key string, defaultValue string, r *http.Request) string {
-	query := r.URL.Query()
-	if val, ok := query[key]; ok {
-		return val[0]
-	}
-	return defaultValue
 }

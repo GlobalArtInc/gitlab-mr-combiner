@@ -49,23 +49,23 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		utils.RespondWithJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		s.RespondWithJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 
 	if event.EventType != "note" || event.ObjectAttr.Action != "create" || event.ObjectAttr.Note != config.TriggerMessage {
-		utils.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Event ignored"})
+		s.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Event ignored"})
 		return
 	}
 
 	if s.isProjectActive(event.ProjectID) {
-		utils.RespondWithJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Project is already being processed"})
+		s.RespondWithJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Project is already being processed"})
 		return
 	}
 
 	if config.SecretToken != "" && r.Header.Get("X-Gitlab-Token") != config.SecretToken {
 		s.activeProjects.Delete(event.ProjectID)
-		utils.RespondWithJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
+		s.RespondWithJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
 		return
 	}
 	s.activeProjects.Store(event.ProjectID, struct{}{})
@@ -79,7 +79,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		s.combineAllMRs(event.ProjectID, event.MergeRequest.IID, r)
 	}()
 
-	utils.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "OK"})
+	s.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "OK"})
 }
 
 func (s *Server) isProjectActive(projectID int) bool {
@@ -103,4 +103,20 @@ func (s *Server) getRepoInfo(projectID int) (*gitlab.RepoInfo, error) {
 	}
 
 	return &repo, nil
+}
+
+func (s *Server) GetQueryParam(key string, defaultValue string, r *http.Request) string {
+	query := r.URL.Query()
+	if val, ok := query[key]; ok {
+		return val[0]
+	}
+	return defaultValue
+}
+
+func (s *Server) RespondWithJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Errorf("Failed to encode JSON response: %v", err)
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"gitlab-mr-combiner/config"
 	"gitlab-mr-combiner/gitlab"
-	"gitlab-mr-combiner/utils"
 	"net/http"
 	"os/exec"
 
@@ -14,7 +13,7 @@ import (
 
 func (s *Server) combineAllMRs(projectID, mergeRequestID int, r *http.Request) {
 	log.Println("Processing MRs for project:", projectID)
-	targetBranch := utils.GetQueryParam("branch", config.TargetBranch, r)
+	targetBranch := s.GetQueryParam("branch", config.TargetBranch, r)
 	repoInfo, err := s.getRepoInfo(projectID)
 	if err != nil {
 		s.addCommentToBuffer(mergeRequestID, fmt.Sprintf("Error fetching repo info: %v", err))
