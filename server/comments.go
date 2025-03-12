@@ -19,9 +19,6 @@ func (s *Server) addCommentToBuffer(mergeRequestID int, comment string) {
 func (s *Server) sendComments(projectID, mergeRequestID int, hasError bool, r *http.Request) {
 	comments, ok := s.commentsBuffer.Load(mergeRequestID)
 	targetBranch := s.GetQueryParam("branch", config.TargetBranch, r)
-	if !hasError {
-		hasError = true
-	}
 	if !ok {
 		log.Warnf("No comments found for MR #%d", mergeRequestID)
 		return
