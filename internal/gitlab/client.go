@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gitlab-mr-combiner/internal/config"
 	"io"
 	"net/http"
-	"gitlab-mr-combiner/config"
 )
 
 type ApiClient struct {

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"sync"
 
-	"gitlab-mr-combiner/config"
-	"gitlab-mr-combiner/gitlab"
-	"gitlab-mr-combiner/utils"
+	"gitlab-mr-combiner/internal/config"
+	"gitlab-mr-combiner/internal/gitlab"
+	"gitlab-mr-combiner/internal/utils"
 
 	log "github.com/sirupsen/logrus"
 )

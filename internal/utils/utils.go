@@ -4,7 +4,7 @@ import (
 	"os"
 	"os/exec"
 
-	"gitlab-mr-combiner/config"
+	"gitlab-mr-combiner/internal/config"
 
 	log "github.com/sirupsen/logrus"
 )

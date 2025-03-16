@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"gitlab-mr-combiner/config"
-	"gitlab-mr-combiner/gitlab"
+	"gitlab-mr-combiner/internal/config"
+	"gitlab-mr-combiner/internal/gitlab"
 	"net/http"
 	"os/exec"
 

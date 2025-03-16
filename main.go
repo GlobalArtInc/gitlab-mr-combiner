@@ -1,6 +1,6 @@
 package main
 
-import "gitlab-mr-combiner/server"
+import "gitlab-mr-combiner/internal/server"
 
 func main() {
 	server := server.NewServer()

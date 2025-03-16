@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"gitlab-mr-combiner/config"
+	"gitlab-mr-combiner/internal/config"
 	"net/http"
 	"strings"
 
