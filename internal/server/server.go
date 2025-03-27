@@ -105,6 +105,9 @@ func (s *Server) validateEvent(event WebhookEvent) (int, int, bool) {
 		if err := json.Unmarshal(event.ObjectAttr, &mrAttr); err != nil {
 			return 0, 0, false
 		}
+		if mrAttr.Action != "update" {
+			return 0, 0, false
+		}
 		for _, label := range mrAttr.Labels {
 			if label.Title == config.TriggerTag {
 				return label.ProjectID, mrAttr.IID, true
