@@ -97,7 +97,6 @@ func (s *Server) validateEvent(event WebhookEvent) (int, int, bool) {
 			if err := json.Unmarshal(event.MergeRequest, &mergeRequest); err != nil {
 				return 0, 0, false
 			}
-			fmt.Println("noteAttr.ProjectID", mergeRequest.IID)
 			return noteAttr.ProjectID, mergeRequest.IID, true
 		}
 
