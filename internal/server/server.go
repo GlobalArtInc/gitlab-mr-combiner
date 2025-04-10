@@ -47,6 +47,14 @@ type MREventAttr struct {
 	} `json:"labels"`
 }
 
+const (
+	eventTypeNote        = "note"
+	eventTypeMergeRequest = "merge_request"
+	notableTypeMergeRequest = "MergeRequest"
+	actionCreate         = "create"
+	actionUpdate         = "update"
+)
+
 func NewServer() *Server {
 	return &Server{
 		apiClient: gitlab.NewApiClient(),
@@ -59,18 +67,18 @@ func (s *Server) Init() {
 	utils.InitLogger()
 
 	http.HandleFunc("/", s.handleWebhook)
-	log.Printf("Server is running on port 8080")
+	log.Info("Server is running on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
-	var event WebhookEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	event, err := s.parseWebhookEvent(r)
+	if err != nil {
 		s.respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	projectID, mergeRequestIID, isValidEvent := s.validateEvent(event)
+	projectID, mergeRequestIID, isValidEvent := s.validateEvent(*event)
 	if !isValidEvent {
 		s.respondWithMessage(w, "Event ignored")
 		return
@@ -82,39 +90,63 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) parseWebhookEvent(r *http.Request) (*WebhookEvent, error) {
+	var event WebhookEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+
 func (s *Server) validateEvent(event WebhookEvent) (int, int, bool) {
 	switch event.EventType {
-	case "note":
-		var noteAttr NoteEventAttr
-		if err := json.Unmarshal(event.ObjectAttr, &noteAttr); err != nil {
-			return 0, 0, false
-		}
-		if noteAttr.Action == "create" && noteAttr.Note == config.TriggerMessage &&
-			noteAttr.NotableType == "MergeRequest" {
-			var mergeRequest struct {
-				IID int `json:"iid"`
-			}
-			if err := json.Unmarshal(event.MergeRequest, &mergeRequest); err != nil {
-				return 0, 0, false
-			}
-			return noteAttr.ProjectID, mergeRequest.IID, true
-		}
+	case eventTypeNote:
+		return s.validateNoteEvent(event)
+	case eventTypeMergeRequest:
+		return s.validateMergeRequestEvent(event)
+	default:
+		return 0, 0, false
+	}
+}
 
-	case "merge_request":
-		var mrAttr MREventAttr
-		if err := json.Unmarshal(event.ObjectAttr, &mrAttr); err != nil {
-			return 0, 0, false
-		}
-		if mrAttr.Action != "update" {
-			return 0, 0, false
-		}
-		for _, label := range mrAttr.Labels {
-			if label.Title == config.TriggerTag {
-				return label.ProjectID, mrAttr.IID, true
-			}
+func (s *Server) validateNoteEvent(event WebhookEvent) (int, int, bool) {
+	var noteAttr NoteEventAttr
+	if err := json.Unmarshal(event.ObjectAttr, &noteAttr); err != nil {
+		return 0, 0, false
+	}
+	
+	if noteAttr.Action != actionCreate || 
+	   noteAttr.Note != config.TriggerMessage || 
+	   noteAttr.NotableType != notableTypeMergeRequest {
+		return 0, 0, false
+	}
+	
+	var mergeRequest struct {
+		IID int `json:"iid"`
+	}
+	if err := json.Unmarshal(event.MergeRequest, &mergeRequest); err != nil {
+		return 0, 0, false
+	}
+	
+	return noteAttr.ProjectID, mergeRequest.IID, true
+}
+
+func (s *Server) validateMergeRequestEvent(event WebhookEvent) (int, int, bool) {
+	var mrAttr MREventAttr
+	if err := json.Unmarshal(event.ObjectAttr, &mrAttr); err != nil {
+		return 0, 0, false
+	}
+	
+	if mrAttr.Action != actionUpdate {
+		return 0, 0, false
+	}
+	
+	for _, label := range mrAttr.Labels {
+		if label.Title == config.TriggerTag {
+			return label.ProjectID, mrAttr.IID, true
 		}
 	}
-
+	
 	return 0, 0, false
 }
 
@@ -125,9 +157,16 @@ func (s *Server) processWebhookEvent(w http.ResponseWriter, r *http.Request, pro
 	}
 
 	if err := s.validateSecretToken(r, projectID); err != nil {
+		s.respondWithError(w, http.StatusUnauthorized, "Invalid secret token")
 		return err
 	}
 
+	s.startMergeProcess(projectID, mergeRequestIID, r)
+	s.respondWithMessage(w, "OK")
+	return nil
+}
+
+func (s *Server) startMergeProcess(projectID, mergeRequestIID int, r *http.Request) {
 	s.activeProjects.Store(projectID, struct{}{})
 	s.commentsBuffer = sync.Map{}
 
@@ -135,16 +174,18 @@ func (s *Server) processWebhookEvent(w http.ResponseWriter, r *http.Request, pro
 		defer s.activeProjects.Delete(projectID)
 		s.combineAllMRs(projectID, mergeRequestIID, r)
 	}()
-
-	s.respondWithMessage(w, "OK")
-	return nil
 }
 
 func (s *Server) validateSecretToken(r *http.Request, projectID int) error {
-	if config.SecretToken != "" && r.Header.Get("X-Gitlab-Token") != config.SecretToken {
+	if config.SecretToken == "" {
+		return nil
+	}
+	
+	if r.Header.Get("X-Gitlab-Token") != config.SecretToken {
 		s.activeProjects.Delete(projectID)
 		return fmt.Errorf("invalid secret token")
 	}
+	
 	return nil
 }
 
