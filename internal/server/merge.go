@@ -58,72 +58,24 @@ func (s *Server) combineAllMRs(projectID, mergeRequestID int, r *http.Request) {
 }
 
 func (s *Server) prepareRepository(clonePath string, repoInfo *gitlab.RepoInfo, targetBranch string) error {
-	if _, err := os.Stat(clonePath); os.IsNotExist(err) {
-		log.Infof("Repository directory not found, cloning repository to %s", clonePath)
-		if err := exec.Command("git", "clone", "--branch", repoInfo.DefaultBranch, repoInfo.RepoURL, clonePath).Run(); err != nil {
-			return fmt.Errorf("error cloning repo: %v", err)
-		}
-	} else {
-		log.Infof("Repository directory exists, updating local repository")
-		if err := s.updateLocalRepository(clonePath, repoInfo.DefaultBranch, targetBranch); err != nil {
-			return err
+	if _, err := os.Stat(clonePath); !os.IsNotExist(err) {
+		log.Infof("Repository directory exists, removing it: %s", clonePath)
+		if err := os.RemoveAll(clonePath); err != nil {
+			return fmt.Errorf("error removing existing repository directory: %v", err)
 		}
 	}
 
-	if err := s.prepareTargetBranch(clonePath, targetBranch); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Server) updateLocalRepository(clonePath, defaultBranch, targetBranch string) error {
-	if err := exec.Command("git", "-C", clonePath, "fetch", "--all").Run(); err != nil {
-		return fmt.Errorf("error fetching updates: %v", err)
-	}
-
-	if err := exec.Command("git", "-C", clonePath, "checkout", defaultBranch).Run(); err != nil {
-		return fmt.Errorf("error checking out default branch: %v", err)
-	}
-
-	if err := exec.Command("git", "-C", clonePath, "reset", "--hard", "origin/"+defaultBranch).Run(); err != nil {
-		return fmt.Errorf("error resetting repository: %v", err)
-	}
-
-	checkBranchCmd := exec.Command("git", "-C", clonePath, "branch", "--list", targetBranch)
-	branchOutput, err := checkBranchCmd.Output()
+	log.Infof("Cloning repository to %s", clonePath)
+	cloneCmd := exec.Command("git", "clone", "--branch", repoInfo.DefaultBranch, repoInfo.RepoURL, clonePath)
+	output, err := cloneCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error checking branch existence: %v", err)
+		return fmt.Errorf("error cloning repo: %v, output: %s", err, output)
 	}
 
-	if len(branchOutput) > 0 {
-		if err := exec.Command("git", "-C", clonePath, "branch", "-D", targetBranch).Run(); err != nil {
-			return fmt.Errorf("error deleting existing target branch: %v", err)
-		}
-	}
-
-	if err := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch).Run(); err != nil {
-		return fmt.Errorf("error creating target branch from default branch: %v", err)
-	}
-
-	return nil
-}
-
-func (s *Server) prepareTargetBranch(clonePath, targetBranch string) error {
-	checkBranchCmd := exec.Command("git", "-C", clonePath, "branch", "--list", targetBranch)
-	branchOutput, err := checkBranchCmd.Output()
+	createBranchCmd := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch)
+	output, err = createBranchCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error checking branch existence: %v", err)
-	}
-
-	if len(branchOutput) > 0 {
-		if err := exec.Command("git", "-C", clonePath, "branch", "-D", targetBranch).Run(); err != nil {
-			return fmt.Errorf("error deleting existing target branch: %v", err)
-		}
-	}
-
-	if err := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch).Run(); err != nil {
-		return fmt.Errorf("error creating target branch: %v", err)
+		return fmt.Errorf("error creating target branch from default branch: %v, output: %s", err, output)
 	}
 
 	return nil
@@ -144,21 +96,30 @@ func (s *Server) processMergeRequests(clonePath string, mergeRequests []gitlab.M
 func (s *Server) processSingleMergeRequest(clonePath string, mr gitlab.MergeRequest, targetBranch string, mergeRequestID int) error {
 	mrBranchName := fmt.Sprintf("mr-%d", mr.IID)
 
-	if err := exec.Command("git", "-C", clonePath, "fetch", "origin", fmt.Sprintf("merge-requests/%d/head:%s", mr.IID, mrBranchName)).Run(); err != nil {
-		s.addCommentToBuffer(mergeRequestID, fmt.Sprintf("Error fetching MR #%d: %v", mr.IID, err))
-		return err
+	fetchCmd := exec.Command("git", "-C", clonePath, "fetch", "origin", fmt.Sprintf("merge-requests/%d/head:%s", mr.IID, mrBranchName))
+	output, err := fetchCmd.CombinedOutput()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error fetching MR #%d: %v, output: %s", mr.IID, err, output)
+		s.addCommentToBuffer(mergeRequestID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
-	if err := exec.Command("git", "-C", clonePath, "checkout", targetBranch).Run(); err != nil {
-		log.Printf("Error checking out branch: %v", err)
-		s.addCommentToBuffer(mergeRequestID, fmt.Sprintf("Error checking out branch: %v", err))
-		return err
+	checkoutCmd := exec.Command("git", "-C", clonePath, "checkout", targetBranch)
+	output, err = checkoutCmd.CombinedOutput()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error checking out branch: %v, output: %s", err, output)
+		log.Printf(errMsg)
+		s.addCommentToBuffer(mergeRequestID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
-	if err := exec.Command("git", "-C", clonePath, "merge", "--no-ff", mrBranchName).Run(); err != nil {
-		log.Printf("Error merging MR #%d: %v", mr.IID, err)
-		s.addCommentToBuffer(mergeRequestID, fmt.Sprintf("Error merging MR #%d: %v", mr.IID, err))
-		return err
+	mergeCmd := exec.Command("git", "-C", clonePath, "merge", "--no-ff", mrBranchName)
+	output, err = mergeCmd.CombinedOutput()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error merging MR #%d: %v, output: %s", mr.IID, err, output)
+		log.Printf(errMsg)
+		s.addCommentToBuffer(mergeRequestID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	s.addCommentToBuffer(mergeRequestID, fmt.Sprintf("Merged MR #%d: %s", mr.IID, mr.Title))
@@ -166,7 +127,12 @@ func (s *Server) processSingleMergeRequest(clonePath string, mr gitlab.MergeRequ
 }
 
 func (s *Server) pushChanges(clonePath, targetBranch string) error {
-	return exec.Command("git", "-C", clonePath, "push", "origin", targetBranch, "--force").Run()
+	pushCmd := exec.Command("git", "-C", clonePath, "push", "origin", targetBranch, "--force")
+	output, err := pushCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error pushing to remote: %v, output: %s", err, output)
+	}
+	return nil
 }
 
 func (s *Server) handleErrorAndNotify(projectID, mergeRequestID int, errorMessage string, r *http.Request) {
