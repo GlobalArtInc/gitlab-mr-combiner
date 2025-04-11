@@ -65,7 +65,7 @@ func (s *Server) prepareRepository(clonePath string, repoInfo *gitlab.RepoInfo, 
 		}
 	} else {
 		log.Infof("Repository directory exists, updating local repository")
-		if err := s.updateLocalRepository(clonePath, repoInfo.DefaultBranch); err != nil {
+		if err := s.updateLocalRepository(clonePath, repoInfo.DefaultBranch, targetBranch); err != nil {
 			return err
 		}
 	}
@@ -77,7 +77,7 @@ func (s *Server) prepareRepository(clonePath string, repoInfo *gitlab.RepoInfo, 
 	return nil
 }
 
-func (s *Server) updateLocalRepository(clonePath, defaultBranch string) error {
+func (s *Server) updateLocalRepository(clonePath, defaultBranch, targetBranch string) error {
 	if err := exec.Command("git", "-C", clonePath, "fetch", "--all").Run(); err != nil {
 		return fmt.Errorf("error fetching updates: %v", err)
 	}
@@ -86,8 +86,24 @@ func (s *Server) updateLocalRepository(clonePath, defaultBranch string) error {
 		return fmt.Errorf("error checking out default branch: %v", err)
 	}
 
-	if err := exec.Command("git", "-C", clonePath, "reset", "--hard").Run(); err != nil {
+	if err := exec.Command("git", "-C", clonePath, "reset", "--hard", "origin/"+defaultBranch).Run(); err != nil {
 		return fmt.Errorf("error resetting repository: %v", err)
+	}
+
+	checkBranchCmd := exec.Command("git", "-C", clonePath, "branch", "--list", targetBranch)
+	branchOutput, err := checkBranchCmd.Output()
+	if err != nil {
+		return fmt.Errorf("error checking branch existence: %v", err)
+	}
+
+	if len(branchOutput) > 0 {
+		if err := exec.Command("git", "-C", clonePath, "branch", "-D", targetBranch).Run(); err != nil {
+			return fmt.Errorf("error deleting existing target branch: %v", err)
+		}
+	}
+
+	if err := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch).Run(); err != nil {
+		return fmt.Errorf("error creating target branch from default branch: %v", err)
 	}
 
 	return nil
