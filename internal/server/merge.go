@@ -94,6 +94,23 @@ func (s *Server) updateLocalRepository(clonePath, defaultBranch string) error {
 		return fmt.Errorf("error pulling latest changes: %v", err)
 	}
 
+	statusCmd := exec.Command("git", "-C", clonePath, "status", "--porcelain")
+	statusOutput, err := statusCmd.Output()
+	if err != nil {
+		return fmt.Errorf("error checking git status: %v", err)
+	}
+
+	if len(statusOutput) > 0 {
+		log.Warn("Local changes detected, attempting to pull changes with force...")
+		if err := exec.Command("git", "-C", clonePath, "fetch", "origin").Run(); err != nil {
+			return fmt.Errorf("error fetching from remote: %v", err)
+		}
+
+		if err := exec.Command("git", "-C", clonePath, "reset", "--hard", "origin/"+defaultBranch).Run(); err != nil {
+			return fmt.Errorf("error resetting to remote branch: %v", err)
+		}
+	}
+
 	return nil
 }
 
