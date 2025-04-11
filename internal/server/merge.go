@@ -78,10 +78,6 @@ func (s *Server) prepareRepository(clonePath string, repoInfo *gitlab.RepoInfo, 
 }
 
 func (s *Server) updateLocalRepository(clonePath, defaultBranch string) error {
-	if err := exec.Command("git", "-C", clonePath, "reset", "--hard").Run(); err != nil {
-		return fmt.Errorf("error resetting repository: %v", err)
-	}
-
 	if err := exec.Command("git", "-C", clonePath, "fetch", "--all").Run(); err != nil {
 		return fmt.Errorf("error fetching updates: %v", err)
 	}
@@ -90,25 +86,8 @@ func (s *Server) updateLocalRepository(clonePath, defaultBranch string) error {
 		return fmt.Errorf("error checking out default branch: %v", err)
 	}
 
-	if err := exec.Command("git", "-C", clonePath, "pull", "origin", defaultBranch).Run(); err != nil {
-		return fmt.Errorf("error pulling latest changes: %v", err)
-	}
-
-	statusCmd := exec.Command("git", "-C", clonePath, "status", "--porcelain")
-	statusOutput, err := statusCmd.Output()
-	if err != nil {
-		return fmt.Errorf("error checking git status: %v", err)
-	}
-
-	if len(statusOutput) > 0 {
-		log.Warn("Local changes detected, attempting to pull changes with force...")
-		if err := exec.Command("git", "-C", clonePath, "fetch", "origin").Run(); err != nil {
-			return fmt.Errorf("error fetching from remote: %v", err)
-		}
-
-		if err := exec.Command("git", "-C", clonePath, "reset", "--hard", "origin/"+defaultBranch).Run(); err != nil {
-			return fmt.Errorf("error resetting to remote branch: %v", err)
-		}
+	if err := exec.Command("git", "-C", clonePath, "reset", "--hard").Run(); err != nil {
+		return fmt.Errorf("error resetting repository: %v", err)
 	}
 
 	return nil
@@ -122,13 +101,13 @@ func (s *Server) prepareTargetBranch(clonePath, targetBranch string) error {
 	}
 
 	if len(branchOutput) > 0 {
-		if err := exec.Command("git", "-C", clonePath, "checkout", targetBranch).Run(); err != nil {
-			return fmt.Errorf("error checking out existing target branch: %v", err)
+		if err := exec.Command("git", "-C", clonePath, "branch", "-D", targetBranch).Run(); err != nil {
+			return fmt.Errorf("error deleting existing target branch: %v", err)
 		}
-	} else {
-		if err := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch).Run(); err != nil {
-			return fmt.Errorf("error creating target branch: %v", err)
-		}
+	}
+
+	if err := exec.Command("git", "-C", clonePath, "checkout", "-b", targetBranch).Run(); err != nil {
+		return fmt.Errorf("error creating target branch: %v", err)
 	}
 
 	return nil
